@@ -87,18 +87,33 @@ def genBookmarkFile():
             print(title + " " + pagenum)
             out.writelines(["\nBookmarkBegin", "\nBookmarkTitle: "+title, "\nBookmarkLevel: "+str(headinglevel), "\nBookmarkPageNumber: "+str(pagenum)])
 
+# This is used internally so that we can separate extraction with and without bookmarks
+def extractPagesFromFile(file, pagerange):
+    os.system("pdfsak --extract-pages "+str(pagerange[0])+"-"+str(pagerange[1])+" -if "+escapeFileString(file)+" -o extractedpages.pdf --overwrite")
+    changeLastOutput("extractedpages.pdf")
 
+def extractPagesWithoutBookmarks():
+    print("===================================")
+    print("Extracting Pages WITHOUT Bookmarks")
+    print("===================================")
+    file = getFile(lastoutput)
+    pagerange = handleExtractionInput()
+    extractPagesFromFile(file, pagerange)
 
-def extractPagesWithBookmarks():
+def handleExtractionInput():
+    pageoffset = input("Page offset (e.g. 50-70): ")
+    pagerange = pageoffset.split("-")
+    
+    return pagerange
+
+# TODO Fix it so that the bookmarks aren't applied to the whole file
+def extractPagesWithBookmarks(withoutBookmarks):
     print("===================================")
     print("Extracting Pages With Bookmarks")
     print("===================================")
     file = getFile(lastoutput)
-    pageoffset = input("Page offset (e.g. 50-70): ")
-    pagerange = pageoffset.split("-")
-
-    os.system("pdfsak --extract-pages "+str(pagerange[0])+"-"+str(pagerange[1])+" -if "+escapeFileString(file)+" -o extractedpages.pdf")
-    changeLastOutput("extractedpages.pdf")
+    pagerange = handleExtractionInput()
+    extractPagesFromFile(file, pagerange)
 
     dumpMetadata(file)
     with open("pdftkdumped-metadata.txt", "r",encoding='utf8') as dumpedFile:
@@ -115,7 +130,7 @@ def extractPagesWithBookmarks():
                     newfile.write(bookmark[1]+bookmark[2]+"\n")
                     newfile.write(bookmark[3]+bookmark[4]+"\n")
                     newfile.write(bookmark[5]+str(int(bookmark[6])-int(pagerange[0])+1)+"\n")
-        updatePDFMetadata(file, "pdftksplitbookmarks.txt")
+        updatePDFMetadata(getFile(lastoutput), "pdftksplitbookmarks.txt")
     # Do the page offsetting, save the file, then apply bookmarks using function
 
 def splitPDFtoPNG():
@@ -154,7 +169,7 @@ def changeLastOutput(filename):
 
 ## parses steps and their options
 def parseStepOptions(step):
-    regex = "^([\d\w]+)(\((.+)\))?"
+    regex = "^([\d\w\(\)]+)(\((.+)\))?"
     parseString = re.findall(regex, step)
     if len(parseString) != 1:
         raise Exception("One of the steps didn't match the correct format")
@@ -181,6 +196,7 @@ functionmap = {
     "3": ["Change Pages(style=arabic;startpage)", changePage],
     "4": ["Bookmark", bookmark],
     "ex": ["Extract pages and bookmarks", extractPagesWithBookmarks],
+    "exwb": ["Extract pages without bookmarks (way faster)", extractPagesWithoutBookmarks],
     "spl": ["Split PDF to PNG", splitPDFtoPNG],
     "clr": ["Remove all page labels", clearPageLabels],
     "editmeta": ["Manually edit metadata", manualEditMetadata]
