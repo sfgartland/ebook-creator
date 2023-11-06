@@ -233,20 +233,26 @@ functionmap = {
     "rn": ["Rename Output", renameCurrentFile]
 }
 
-for key, item in functionmap.items():
-    print(key+": "+item[0])
 
-steps = input("Order of steps(default 1,2,3,4): ").split(",")
 
-# If no input there will be a default order of steps, merging .tif files into a ocr'd, pagecorrected, and bookmarked file
-if steps == ['']:
-    steps=["1", "2", "3", "4"]
+def UI():
+    for key, item in functionmap.items():
+        print(key+": "+item[0])
 
-for i,step in enumerate(steps):
-    steps[i] = parseStepOptions(step)
+    steps = input("Order of steps(default 1,2,3,4): ").split(",")
 
-for step in steps:
-    print(step)
-    functionmap[step["step"]][1](**step["options"])
+    # If no input there will be a default order of steps, merging .tif files into a ocr'd, pagecorrected, and bookmarked file
+    if steps == ['']:
+        steps=["1", "2", "3", "4"]
 
-input("DONE... Press key to exit!")
+    for i,step in enumerate(steps):
+        steps[i] = parseStepOptions(step)
+
+    for step in steps:
+        print(step)
+        functionmap[step["step"]][1](**step["options"])
+
+    input("DONE... Press key to exit!")
+
+
+UI()
