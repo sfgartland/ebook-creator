@@ -3,7 +3,22 @@ import re
 
 lastoutput = None
 
+
+def getLO():
+    global lastoutput
+    return lastoutput
+
+def setLO(LO):
+    global lastoutput
+    lastoutput = LO
+    print("Last output: "+lastoutput)
+    return lastoutput
+
+
 def getFile(default=None):
+    if default == None:
+        default = getLO()
+
     if default and os.path.isfile(default):
         return default
     else:
@@ -12,8 +27,7 @@ def getFile(default=None):
         for i,file in enumerate(files):
             print(str(i+1)+": "+file)
         selected = input("What file do you want to use: ")
-        return "\""+files[int(selected)-1]+"\""
-
+        return setLO(files[int(selected)-1])
 
 def escapeFileString(path):
     return path
@@ -24,15 +38,19 @@ def merge():
     print("Merging Images")
     print("===================================")
     os.system("magick convert *.{tif,png} merged.pdf")
-    changeLastOutput("merged.pdf")
+    setLO("merged.pdf")
 
-def ocr(language="eng"):
+def ocr(language="eng", pages=None):
     print("===================================")
     print("OCR")
     print("language="+str(language))
     print("===================================")
-    os.system("ocrmypdf "+escapeFileString(getFile(lastoutput))+" ocr.pdf -l "+language+" --force-ocr")
-    changeLastOutput("ocr.pdf")
+
+    pagesString = "--pages "+pages if pages else ""
+
+
+    os.system("ocrmypdf "+escapeFileString(getFile())+" ocr.pdf -l "+language+" --force-ocr "+pagesString)
+    setLO("ocr.pdf")
 
 def changePage(startpage=None, style="arabic"):
     print("===================================")
@@ -41,7 +59,7 @@ def changePage(startpage=None, style="arabic"):
     print("style="+str(style))
     print("===================================")
 
-    file = getFile(lastoutput)
+    file = getFile()
 
     if not startpage:
         os.startfile(file)
@@ -54,7 +72,7 @@ def bookmark():
     print("===================================")
     print("Bookmarking")
     print("===================================")
-    file = getFile(lastoutput)
+    file = getFile()
     os.startfile(file)
     # Creates file if it is not there
     if not os.path.isfile("bookmarks.txt"):
@@ -71,7 +89,7 @@ def dumpMetadata(pdfFile, outFile="pdftkdumped-metadata.txt"):
 
 def updatePDFMetadata(pdfFile, bookmarkFile="pdftkbookmarks.txt"):
     os.system("pdftk "+escapeFileString(pdfFile)+" update_info_utf8 "+escapeFileString(bookmarkFile)+" output final.pdf")
-    changeLastOutput("final.pdf")
+    setLO("final.pdf")
 
 def genBookmarkFile():
     lines = open("bookmarks.txt", "r", encoding='utf-8').readlines()
@@ -89,14 +107,14 @@ def genBookmarkFile():
 
 # This is used internally so that we can separate extraction with and without bookmarks
 def extractPagesFromFile(file, pagerange):
-    os.system("pdfsak --extract-pages "+str(pagerange[0])+"-"+str(pagerange[1])+" -if "+escapeFileString(file)+" -o extractedpages.pdf --overwrite")
-    changeLastOutput("extractedpages.pdf")
+    os.system("pdfsak --extract-pages "+str(pagerange[0])+"-"+str(pagerange[1])+" -if \""+escapeFileString(file)+"\" -o extractedpages.pdf --overwrite")
+    setLO("extractedpages.pdf")
 
 def extractPagesWithoutBookmarks():
     print("===================================")
     print("Extracting Pages WITHOUT Bookmarks")
     print("===================================")
-    file = getFile(lastoutput)
+    file = getFile()
     pagerange = handleExtractionInput()
     extractPagesFromFile(file, pagerange)
 
@@ -111,7 +129,7 @@ def extractPagesWithBookmarks(withoutBookmarks):
     print("===================================")
     print("Extracting Pages With Bookmarks")
     print("===================================")
-    file = getFile(lastoutput)
+    file = getFile()
     pagerange = handleExtractionInput()
     extractPagesFromFile(file, pagerange)
 
@@ -130,17 +148,17 @@ def extractPagesWithBookmarks(withoutBookmarks):
                     newfile.write(bookmark[1]+bookmark[2]+"\n")
                     newfile.write(bookmark[3]+bookmark[4]+"\n")
                     newfile.write(bookmark[5]+str(int(bookmark[6])-int(pagerange[0])+1)+"\n")
-        updatePDFMetadata(getFile(lastoutput), "pdftksplitbookmarks.txt")
+        updatePDFMetadata(getFile(), "pdftksplitbookmarks.txt")
     # Do the page offsetting, save the file, then apply bookmarks using function
 
 def splitPDFtoPNG():
     print("===================================")
     print("Splitting PDF to PNG")
     print("===================================")
-    os.system("pdftoppm -png "+escapeFileString(getFile(lastoutput))+" in")
+    os.system("pdftoppm -png "+escapeFileString(getFile())+" in")
 
 def clearPageLabels():
-    file = getFile(lastoutput)
+    file = getFile()
     dumpMetadata(file)
 
     with open("pdftkdumped-metadata.txt", "r",encoding='utf8') as dumpedFile:
@@ -154,22 +172,33 @@ def clearPageLabels():
         updatePDFMetadata(file, "pdftksplitbookmarks.txt")
 
 def manualEditMetadata():
-    file = getFile(lastoutput)
+    file = getFile()
     print("Extracting metadata, this may take a few minutes!")
     dumpMetadata(file)
     input("Press ENTER after editing metadata file!")
     updatePDFMetadata(file, "pdftkdumped-metadata.txt")
 
 
+def openCurrentFile():
+    os.startfile(getFile())
 
-def changeLastOutput(filename):
-    lastoutput = filename
-    print("Last output: "+lastoutput)
+def renameCurrentFile():
+    if not getLO():
+        print("There needs to be a selected file to rename. Currently there is no 'current file'!")
+        print("Please select one!")
+        getFile()
+
+    newName = input("New name: ")
+    split = os.path.splitext(newName)
+    if split[1] == "":
+        newName = newName+".pdf"
+    print(f"Renaming '{getLO()}' to '{newName}'!")
+    os.rename(getLO(), newName)
 
 
 ## parses steps and their options
 def parseStepOptions(step):
-    regex = "^([\d\w\(\)]+)(\((.+)\))?"
+    regex = "^([\d\w]+)(\((.+)\))?"
     parseString = re.findall(regex, step)
     if len(parseString) != 1:
         raise Exception("One of the steps didn't match the correct format")
@@ -192,14 +221,16 @@ def parseStepOptions(step):
 
 functionmap = {
     "1": ["merge", merge],
-    "2": ["OCR(language=eng)", ocr],
+    "2": ["OCR(language=eng,pages=all)", ocr],
     "3": ["Change Pages(style=arabic;startpage)", changePage],
     "4": ["Bookmark", bookmark],
     "ex": ["Extract pages and bookmarks", extractPagesWithBookmarks],
     "exwb": ["Extract pages without bookmarks (way faster)", extractPagesWithoutBookmarks],
     "spl": ["Split PDF to PNG", splitPDFtoPNG],
     "clr": ["Remove all page labels", clearPageLabels],
-    "editmeta": ["Manually edit metadata", manualEditMetadata]
+    "editmeta": ["Manually edit metadata", manualEditMetadata],
+    "o": ["Open current file", openCurrentFile],
+    "rn": ["Rename Output", renameCurrentFile]
 }
 
 for key, item in functionmap.items():
