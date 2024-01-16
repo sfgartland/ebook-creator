@@ -9,6 +9,9 @@ from rich.prompt import Prompt
 
 from rich.console import Console
 
+from pdfrw import PdfReader, PdfWriter
+from pagelabels import PageLabels, PageLabelScheme
+
 console = Console()
 
 from pagerange import PageRange
@@ -89,7 +92,17 @@ def changePage(startpage=None, style="arabic"):
     if not startpage:
         os.startfile(file)
         startpage = input("Start page: ")
-    os.system("python -m pagelabels --type \""+style+"\" --startpage 1 --firstpagenum "+startpage+" "+escapeFileString(file))
+
+    newLabels = PageLabelScheme(startpage=0, style=style, firstpagenum=int(startpage))
+    reader = PdfReader(file)
+    labels = PageLabels()
+    labels.append(newLabels)
+    labels.write(reader)
+
+    writer = PdfWriter()
+    writer.trailer = reader
+    writer.write(file)
+    # os.system("python -m pagelabels --type \""+style+"\" --startpage 1 --firstpagenum "+startpage+" "+escapeFileString(file))
     # No need to set last output since it is the same
 
 @app.command("bookmark")
