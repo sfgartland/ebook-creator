@@ -1,6 +1,18 @@
 import os
 import re
 
+import typer
+
+from rich import print
+from rich.table import Table
+from rich.prompt import Prompt
+
+from rich.console import Console
+
+console = Console()
+
+from pagerange import PageRange
+
 lastoutput = None
 
 
@@ -24,15 +36,26 @@ def getFile(default=None):
     else:
         print("Couldn't find the default file...")
         files = [k for k in os.listdir() if '.pdf' in k]
+
+        fileTable = Table(title="Files")
+        fileTable.add_column("")
+        fileTable.add_column("Name")
         for i,file in enumerate(files):
-            print(str(i+1)+": "+file)
+            fileTable.add_row(str(i+1),file)
+        print(fileTable)
         selected = input("What file do you want to use: ")
         return setLO(files[int(selected)-1])
-
+    
+    
 def escapeFileString(path):
     return path
     #This doesn't work now, it does nothing
 
+
+
+app = typer.Typer()
+
+@app.command("merge")
 def merge():
     print("===================================")
     print("Merging Images")
@@ -40,6 +63,7 @@ def merge():
     os.system("magick convert *.{tif,png} merged.pdf")
     setLO("merged.pdf")
 
+@app.command("ocr")
 def ocr(language="eng", pages=None):
     print("===================================")
     print("OCR")
@@ -49,9 +73,10 @@ def ocr(language="eng", pages=None):
     pagesString = "--pages "+pages if pages else ""
 
 
-    os.system("ocrmypdf "+escapeFileString(getFile())+" ocr.pdf -l "+language+" --force-ocr "+pagesString)
+    os.system("ocrmypdf \""+escapeFileString(getFile())+"\" ocr.pdf -l "+language+" --force-ocr "+pagesString)
     setLO("ocr.pdf")
 
+@app.command("change-pages")
 def changePage(startpage=None, style="arabic"):
     print("===================================")
     print("Changing pages")
@@ -67,7 +92,7 @@ def changePage(startpage=None, style="arabic"):
     os.system("python3 -m pagelabels --type \""+style+"\" --startpage 1 --firstpagenum "+startpage+" "+escapeFileString(file))
     # No need to set last output since it is the same
 
-
+@app.command("bookmark")
 def bookmark():
     print("===================================")
     print("Bookmarking")
@@ -106,17 +131,22 @@ def genBookmarkFile():
             out.writelines(["\nBookmarkBegin", "\nBookmarkTitle: "+title, "\nBookmarkLevel: "+str(headinglevel), "\nBookmarkPageNumber: "+str(pagenum)])
 
 # This is used internally so that we can separate extraction with and without bookmarks
-def extractPagesFromFile(file, pagerange):
-    os.system("pdfsak --extract-pages "+str(pagerange[0])+"-"+str(pagerange[1])+" -if \""+escapeFileString(file)+"\" -o extractedpages.pdf --overwrite")
+def extractPagesFromFile(file, pagerange, output="extractedpages.pdf"):
+    os.system(f"pdfsak --extract-pages {str(pagerange[0])}-{str(pagerange[1])} -if \"{escapeFileString(file)}\" -o {escapeFileString(output)} --overwrite")
     setLO("extractedpages.pdf")
 
-def extractPagesWithoutBookmarks():
+@app.command("exwb")
+def extractPagesWithoutBookmarks(file: str=None, pagerange: str=None, output: str="extractedpages.pdf"):
     print("===================================")
     print("Extracting Pages WITHOUT Bookmarks")
     print("===================================")
-    file = getFile()
-    pagerange = handleExtractionInput()
-    extractPagesFromFile(file, pagerange)
+    if not file:
+        file = getFile()
+    if pagerange:
+        pagerange = pagerange.split("-")
+    else:
+        pagerange = handleExtractionInput()
+    extractPagesFromFile(file, pagerange, output)
 
 def handleExtractionInput():
     pageoffset = input("Page offset (e.g. 50-70): ")
@@ -125,6 +155,7 @@ def handleExtractionInput():
     return pagerange
 
 # TODO Fix it so that the bookmarks aren't applied to the whole file
+@app.command("ex")
 def extractPagesWithBookmarks(withoutBookmarks):
     print("===================================")
     print("Extracting Pages With Bookmarks")
@@ -151,12 +182,14 @@ def extractPagesWithBookmarks(withoutBookmarks):
         updatePDFMetadata(getFile(), "pdftksplitbookmarks.txt")
     # Do the page offsetting, save the file, then apply bookmarks using function
 
+@app.command("split")
 def splitPDFtoPNG():
     print("===================================")
     print("Splitting PDF to PNG")
     print("===================================")
-    os.system("pdftoppm -png "+escapeFileString(getFile())+" in")
+    os.system(f"pdftoppm -png \"{escapeFileString(getFile())}\" in")
 
+@app.command("clr")
 def clearPageLabels():
     file = getFile()
     dumpMetadata(file)
@@ -171,13 +204,13 @@ def clearPageLabels():
             newfile.write(withoutPageLabels)
         updatePDFMetadata(file, "pdftksplitbookmarks.txt")
 
+@app.command("editmeta")
 def manualEditMetadata():
     file = getFile()
     print("Extracting metadata, this may take a few minutes!")
     dumpMetadata(file)
     input("Press ENTER after editing metadata file!")
     updatePDFMetadata(file, "pdftkdumped-metadata.txt")
-
 
 def openCurrentFile():
     os.startfile(getFile())
@@ -194,6 +227,7 @@ def renameCurrentFile():
         newName = newName+".pdf"
     print(f"Renaming '{getLO()}' to '{newName}'!")
     os.rename(getLO(), newName)
+
 
 
 ## parses steps and their options
@@ -234,12 +268,20 @@ functionmap = {
 }
 
 
-
+@app.command("UI")
 def UI():
-    for key, item in functionmap.items():
-        print(key+": "+item[0])
+    stepsTable = Table(title="Steps")
+    stepsTable.add_column("", justify="right")
+    stepsTable.add_column("Name")
+    stepsTable.add_column("")
 
-    steps = input("Order of steps(default 1,2,3,4): ").split(",")
+    for key, item in functionmap.items():
+        stepsTable.add_row(key, item[0], "")
+
+    print(stepsTable)
+
+    # steps = input("Order of steps(default 1,2,3,4): ").split(",")
+    steps = Prompt.ask("Order of steps(default 1,2,3,4)").split(",")
 
     # If no input there will be a default order of steps, merging .tif files into a ocr'd, pagecorrected, and bookmarked file
     if steps == ['']:
@@ -254,5 +296,9 @@ def UI():
 
     input("DONE... Press key to exit!")
 
+@app.command("main")
+def main():
+    UI()
 
-UI()
+if __name__ == "__main__":
+    app()
