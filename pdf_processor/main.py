@@ -89,7 +89,7 @@ def changePage(startpage=None, style="arabic"):
     if not startpage:
         os.startfile(file)
         startpage = input("Start page: ")
-    os.system("python3 -m pagelabels --type \""+style+"\" --startpage 1 --firstpagenum "+startpage+" "+escapeFileString(file))
+    os.system("python -m pagelabels --type \""+style+"\" --startpage 1 --firstpagenum "+startpage+" "+escapeFileString(file))
     # No need to set last output since it is the same
 
 @app.command("bookmark")
